@@ -24,25 +24,6 @@ class TaskResult:
         }
 
 
-def compute_accuracy(
-    predictions: list[str], labels: list[list[str]]
-) -> tuple[int, int]:
-    correct = 0
-    for pred, lbl in zip(predictions, labels):
-        if pred.strip().lower() == lbl[0].strip().lower():
-            correct += 1
-    return correct, len(labels)
-
-
-def compute_f1_tokens(pred_tokens: list[str], label_tokens: list[str]) -> float:
-    tp = sum(1 for t in pred_tokens if t in label_tokens)
-    precision = tp / len(pred_tokens) if pred_tokens else 0.0
-    recall = tp / len(label_tokens) if label_tokens else 0.0
-    if precision + recall == 0:
-        return 0.0
-    return 2 * precision * recall / (precision + recall)
-
-
 def compute_f1_entities(
     predictions: list[list[tuple[str, str]]],
     labels: list[list[tuple[str, str]]],

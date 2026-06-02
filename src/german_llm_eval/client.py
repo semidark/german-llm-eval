@@ -5,7 +5,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from openai import AsyncOpenAI
+from openai import APITimeoutError, APIConnectionError, AsyncOpenAI, RateLimitError
 
 
 @dataclass
@@ -38,7 +38,7 @@ class APIClient:
                     temperature=self._config.temperature,
                 )
                 return resp.choices[0].message.content or ""
-            except Exception as exc:  # noqa: PERF203
+            except (APIConnectionError, RateLimitError, APITimeoutError) as exc:
                 last_err = exc
                 if attempt < self._config.max_retries:
                     await asyncio.sleep(min(2**attempt, 10))

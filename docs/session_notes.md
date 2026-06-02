@@ -45,7 +45,7 @@ Original classes were lowercase English (`offensive`, `non-offensive`). Actual l
 
 ## Remaining Work Items
 - YAML config file support for reusable evaluation setups
-- NER: parse LLM free-text output -> compare against gold entities with `compute_f1_entities`
-- QA: exact match + normalized EM scoring against gold answers
+- ~~NER: parse LLM free-text output -> compare against gold entities with `compute_f1_entities`~~ ✅ Done (2025-06-02)
+- ~~QA: exact match + normalized EM scoring against gold answers~~ ✅ Done (2025-06-02)
 - Mock API backend for offline testing
 - End-to-end integration test with real API

@@ -3,9 +3,13 @@ from __future__ import annotations
 import asyncio
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
+from openai import APIConnectionError
 
 from german_llm_eval.client import APIClient, APIClientConfig
+
+_REQ = httpx.Request("GET", "http://test")
 
 
 @pytest.mark.asyncio
@@ -68,7 +72,7 @@ async def test_generate_retry_success() -> None:
         nonlocal call_count
         call_count += 1
         if call_count < 2:
-            raise Exception("transient error")
+            raise APIConnectionError(request=_REQ)
         resp = AsyncMock()
         resp.choices[0].message.content = "recovered"
         return resp
@@ -89,7 +93,7 @@ async def test_generate_retry_exhausted() -> None:
     with patch.object(
         client._client.chat.completions,
         "create",
-        new=AsyncMock(side_effect=Exception("always fails")),
+        new=AsyncMock(side_effect=APIConnectionError(request=_REQ)),
     ):
         with patch.object(asyncio, "sleep", new=AsyncMock()):
             with pytest.raises(RuntimeError, match="Failed after 2 retries"):

@@ -2,7 +2,7 @@
 name = "german-llm-eval"
 version = "0.1.0"
 description = "API-based LLM evaluator using SuperGLEBer German benchmark datasets"
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 dependencies = [
     "pyarrow",
     "openai>=1.0.0",

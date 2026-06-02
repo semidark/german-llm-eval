@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from german_llm_eval.metrics import (
     TaskResult,
-    compute_accuracy,
     compute_f1_entities,
-    compute_f1_tokens,
 )
 
 
@@ -38,70 +36,6 @@ def test_task_result_default_metric_label() -> None:
         details={},
     )
     assert r.metric_label is None
-
-
-# -- compute_accuracy --
-
-
-def test_compute_accuracy_all_correct() -> None:
-    preds = ["pos", "neg", "neu"]
-    labels = [["pos"], ["neg"], ["neu"]]
-    correct, total = compute_accuracy(preds, labels)
-    assert correct == 3
-    assert total == 3
-
-
-def test_compute_accuracy_none_correct() -> None:
-    preds = ["neg", "pos", "pos"]
-    labels = [["pos"], ["neg"], ["neu"]]
-    correct, total = compute_accuracy(preds, labels)
-    assert correct == 0
-    assert total == 3
-
-
-def test_compute_accuracy_case_insensitive() -> None:
-    preds = ["POS", "Neg"]
-    labels = [["pos"], ["neg"]]
-    correct, total = compute_accuracy(preds, labels)
-    assert correct == 2
-    assert total == 2
-
-
-def test_compute_accuracy_whitespace() -> None:
-    preds = [" pos ", " neg"]
-    labels = [["pos"], ["neg"]]
-    correct, total = compute_accuracy(preds, labels)
-    assert correct == 2
-
-
-# -- compute_f1_tokens --
-
-
-def test_compute_f1_tokens_perfect() -> None:
-    pred = ["hello", "world"]
-    labels = ["hello", "world"]
-    assert compute_f1_tokens(pred, labels) == 1.0
-
-
-def test_compute_f1_tokens_partial() -> None:
-    pred = ["hello", "world", "foo"]
-    labels = ["hello", "world"]
-    f1 = compute_f1_tokens(pred, labels)
-    assert 0.0 < f1 < 1.0
-
-
-def test_compute_f1_tokens_no_overlap() -> None:
-    pred = ["foo", "bar"]
-    labels = ["hello", "world"]
-    assert compute_f1_tokens(pred, labels) == 0.0
-
-
-def test_compute_f1_tokens_empty_pred() -> None:
-    assert compute_f1_tokens([], ["hello"]) == 0.0
-
-
-def test_compute_f1_tokens_empty_label() -> None:
-    assert compute_f1_tokens(["hello"], []) == 0.0
 
 
 # -- compute_f1_entities --
