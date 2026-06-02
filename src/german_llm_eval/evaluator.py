@@ -95,7 +95,9 @@ class Evaluator:
 
             if not ok_indices:
                 logger.warning(f"Skipping {task_name}: all API requests failed")
-                console.print(f"[yellow]Skipping {task_name}: all API requests failed[/yellow]")
+                console.print(
+                    f"[yellow]Skipping {task_name}: all API requests failed[/yellow]"
+                )
                 continue
 
             responses = [batch.responses[i] for i in ok_indices]

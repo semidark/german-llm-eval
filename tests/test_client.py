@@ -124,9 +124,7 @@ async def test_generate_batch_partial_failure() -> None:
         resp.choices[0].message.content = "ok"
         return resp
 
-    with patch.object(
-        client._client.chat.completions, "create", new=flaky_create
-    ):
+    with patch.object(client._client.chat.completions, "create", new=flaky_create):
         result = await client.generate_batch(prompts, concurrency=3)
 
     assert len(result.responses) == 3
