@@ -30,8 +30,9 @@ async def test_generate_batch_basic() -> None:
     ):
         results = await client.generate_batch(prompts, concurrency=2)
 
-    assert len(results) == 2
-    assert all(r == "response" for r in results)
+    assert len(results.responses) == 2
+    assert all(r == "response" for r in results.responses)
+    assert all(results.successes)
 
 
 @pytest.mark.asyncio
@@ -98,6 +99,41 @@ async def test_generate_retry_exhausted() -> None:
         with patch.object(asyncio, "sleep", new=AsyncMock()):
             with pytest.raises(RuntimeError, match="Failed after 2 retries"):
                 await client.generate([{"role": "user", "content": "test"}])
+
+
+@pytest.mark.asyncio
+async def test_generate_batch_partial_failure() -> None:
+    """Failed requests in a batch don't abort the entire batch."""
+    config = APIClientConfig(model="test-model", api_key="sk-test-key", max_retries=1)
+    client = APIClient(config)
+
+    prompts = [
+        [{"role": "user", "content": "one"}],
+        [{"role": "user", "content": "two"}],
+        [{"role": "user", "content": "three"}],
+    ]
+
+    call_count = 0
+
+    async def flaky_create(**_: object) -> object:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2:
+            raise APIConnectionError(request=_REQ)
+        resp = AsyncMock()
+        resp.choices[0].message.content = "ok"
+        return resp
+
+    with patch.object(
+        client._client.chat.completions, "create", new=flaky_create
+    ):
+        result = await client.generate_batch(prompts, concurrency=3)
+
+    assert len(result.responses) == 3
+    assert result.successes == [True, False, True]
+    assert result.responses[0] == "ok"
+    assert result.responses[1] == ""
+    assert result.responses[2] == "ok"
 
 
 def test_api_key_validation() -> None:

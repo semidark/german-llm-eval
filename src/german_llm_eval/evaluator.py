@@ -70,27 +70,40 @@ class Evaluator:
             start = time.time()
             prompt_list = [task_def.build_prompt(s) for s in samples]
 
-            try:
-                with tqdm(total=len(prompt_list), desc=task_name) as pbar:
+            with tqdm(total=len(prompt_list), desc=task_name) as pbar:
 
-                    def _progress(n: int) -> None:
-                        pbar.update(n - pbar.n)
+                def _progress(n: int) -> None:
+                    pbar.update(n - pbar.n)
 
-                    responses = await self._api.generate_batch(
-                        prompt_list, self._concurrency, _progress
-                    )
-            except BaseExceptionGroup as exc:
-                errors = exc.exceptions
+                batch = await self._api.generate_batch(
+                    prompt_list, self._concurrency, _progress
+                )
+
+            # Filter to only successful responses
+            failed = sum(1 for s in batch.successes if not s)
+            ok_indices = [i for i, s in enumerate(batch.successes) if s]
+
+            if failed:
                 logger.warning(
-                    f"Skipping {task_name}: {len(errors)} API request(s) failed: {errors[0]}"
+                    f"{task_name}: {failed}/{len(samples)} requests failed, "
+                    f"evaluating {len(ok_indices)}/{len(samples)}"
                 )
                 console.print(
-                    f"[yellow]Skipping {task_name}: {len(errors)} API request(s) failed[/yellow]"
+                    f"  [yellow]{failed}/{len(samples)} requests failed, "
+                    f"evaluating {len(ok_indices)}/{len(samples)}[/yellow]"
                 )
+
+            if not ok_indices:
+                logger.warning(f"Skipping {task_name}: all API requests failed")
+                console.print(f"[yellow]Skipping {task_name}: all API requests failed[/yellow]")
                 continue
 
+            responses = [batch.responses[i] for i in ok_indices]
+            ok_samples = [samples[i] for i in ok_indices]
+
             elapsed = time.time() - start
-            result: TaskResult = task_def.evaluate(responses, samples)  # type: ignore[assignment]
+            result: TaskResult = task_def.evaluate(responses, ok_samples)  # type: ignore[assignment]
+            result.details["skipped"] = failed
             results.append(result)
 
             if result.metric_label:

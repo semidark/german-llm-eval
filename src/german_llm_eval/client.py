@@ -19,6 +19,12 @@ class APIClientConfig:
     timeout_seconds: float = 60.0
 
 
+@dataclass
+class BatchResult:
+    responses: list[str]
+    successes: list[bool]
+
+
 class APIClient:
     def __init__(self, config: APIClientConfig | None = None) -> None:
         self._config = config or APIClientConfig()
@@ -62,15 +68,20 @@ class APIClient:
         prompt_list: list[list[dict[str, str]]],
         concurrency: int = 5,
         progress_callback: Callable[[int], None] | None = None,
-    ) -> list[str]:
+    ) -> BatchResult:
         semaphore = asyncio.Semaphore(concurrency)
         completed = 0
-        results: list[str] = ["" for _ in prompt_list]
+        responses: list[str] = ["" for _ in prompt_list]
+        successes: list[bool] = [False for _ in prompt_list]
 
         async def _with_index(idx: int, prompt: list[dict[str, str]]) -> None:
             nonlocal completed
             async with semaphore:
-                results[idx] = await self.generate(prompt)
+                try:
+                    responses[idx] = await self.generate(prompt)
+                    successes[idx] = True
+                except Exception as exc:
+                    logger.warning(f"Request {idx} failed after retries: {exc}")
                 completed += 1
                 if progress_callback:
                     progress_callback(completed)
@@ -79,4 +90,4 @@ class APIClient:
             for i, prompt in enumerate(prompt_list):
                 tg.create_task(_with_index(i, prompt), name=f"prompt-{i}")
 
-        return results
+        return BatchResult(responses=responses, successes=successes)

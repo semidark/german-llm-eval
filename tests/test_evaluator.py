@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from german_llm_eval.client import APIClientConfig
+from german_llm_eval.client import APIClientConfig, BatchResult
 from german_llm_eval.evaluator import Evaluator
 from german_llm_eval.metrics import TaskResult
 
@@ -25,7 +25,10 @@ async def test_evaluator_run_basic(tmp_path: Path) -> None:
     )
 
     with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
-        mock.return_value = ["positive", "negative"]
+        mock.return_value = BatchResult(
+            responses=["positive", "negative"],
+            successes=[True, True],
+        )
         results = await evaluator.run(task_names=["polarity"], split="test")
 
     assert len(results) == 1
@@ -77,7 +80,10 @@ async def test_evaluator_max_samples(tmp_path: Path) -> None:
     )
 
     with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
-        mock.return_value = ["positive"] * 10
+        mock.return_value = BatchResult(
+            responses=["positive"] * 10,
+            successes=[True] * 10,
+        )
         results = await evaluator.run(task_names=["polarity"], split="test")
 
     assert results[0].total == 10
@@ -169,7 +175,10 @@ async def test_evaluator_ner_task(tmp_path: Path) -> None:
     )
 
     with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
-        mock.return_value = ["MISC: Nico"]
+        mock.return_value = BatchResult(
+            responses=["MISC: Nico"],
+            successes=[True],
+        )
         results = await evaluator.run(task_names=["ner_wiki_news"], split="test")
 
     assert len(results) == 1
@@ -178,8 +187,34 @@ async def test_evaluator_ner_task(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_evaluator_api_exception_group_skip(tmp_path: Path) -> None:
-    """ExceptionGroup from TaskGroup skips task gracefully instead of crashing."""
+async def test_evaluator_partial_batch_success(tmp_path: Path) -> None:
+    """Partial batch failures still produce results from successful requests."""
+    (tmp_path / "Germeval" / "2017").mkdir(parents=True)
+    (tmp_path / "Germeval" / "2017" / "test.tsv").write_text(
+        "id\tGut\t-src\tpositive\nid\tSchlecht\t-src\tnegative\nid\tOkay\t-src\tpositive\n"
+    )
+
+    evaluator = Evaluator(
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
+        data_root=tmp_path,
+    )
+
+    with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
+        mock.return_value = BatchResult(
+            responses=["positive", "", "positive"],
+            successes=[True, False, True],
+        )
+        results = await evaluator.run(task_names=["polarity"], split="test")
+
+    assert len(results) == 1
+    assert results[0].total == 2
+    assert results[0].correct == 2
+    assert results[0].details["skipped"] == 1
+
+
+@pytest.mark.asyncio
+async def test_evaluator_all_requests_fail(tmp_path: Path) -> None:
+    """When all requests fail, task is skipped."""
     (tmp_path / "Germeval" / "2017").mkdir(parents=True)
     (tmp_path / "Germeval" / "2017" / "test.tsv").write_text(
         "id\tGut\t-src\tpositive\nid\tSchlecht\t-src\tnegative\n"
@@ -190,11 +225,11 @@ async def test_evaluator_api_exception_group_skip(tmp_path: Path) -> None:
         data_root=tmp_path,
     )
 
-    async def raise_exception_group(*args: object, **kwargs: object) -> None:
-        raise ExceptionGroup("api failures", [RuntimeError("connection timeout")])
-
     with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
-        mock.side_effect = raise_exception_group
+        mock.return_value = BatchResult(
+            responses=["", ""],
+            successes=[False, False],
+        )
         results = await evaluator.run(task_names=["polarity"], split="test")
 
     assert len(results) == 0
@@ -214,7 +249,10 @@ async def test_evaluator_metric_in_details(tmp_path: Path) -> None:
     )
 
     with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
-        mock.return_value = ["positive"]
+        mock.return_value = BatchResult(
+            responses=["positive"],
+            successes=[True],
+        )
         results = await evaluator.run(task_names=["polarity"], split="test")
 
     assert results[0].details["metric"] == "accuracy"

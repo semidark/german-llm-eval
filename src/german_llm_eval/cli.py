@@ -117,9 +117,9 @@ def main() -> None:
     results = asyncio.run(evaluator.run(task_names=args.tasks, split=args.split))
 
     if not results:
-        logger.error("No tasks completed. Check data paths and task availability.")
+        logger.error("No tasks completed successfully.")
         _cli_console.print(
-            "No tasks completed. Check data paths and task availability.",
+            "No tasks completed successfully. See warnings above for details.",
             style="red",
         )
         sys.exit(1)
