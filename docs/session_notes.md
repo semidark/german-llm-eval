@@ -6,7 +6,7 @@
 - Unified `Sample` dataclass: `inputs: dict[str, Any]`, `labels: list[str]`
 - Prompt templates live in `TaskDefinition` subclasses (no per-task template files)
 - Default German-language prompts built into classification tasks
-- Sync API client used by default for simpler CLI; async `APIClient` available
+- Async `APIClient` with `asyncio.TaskGroup` concurrency for all API calls
 - `pyarrow.ipc.open_stream` for arrow datasets (faster, fewer deps than `datasets` lib)
 
 ## Bugs Fixed During Build

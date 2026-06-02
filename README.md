@@ -5,7 +5,7 @@ Custom API-based evaluation tool for German-language LLMs using SuperGLEBer benc
 ## Usage
 
 ```sh
-german-llm-eval --model gpt-4o --base-url https://api.openai.com \
+german-llm-eval --model gpt-4o --base-url https://api.openai.com/v1 \
   --api-key $OPENAI_API_KEY --tasks germanquad,polarity --max-samples 50
 
 # Output to JSON
@@ -18,7 +18,7 @@ german-llm-eval --list-tasks
 ### CLI Options
 | Flag | Description |
 |---|---|
-| `--base-url` | API base URL (default: `https://api.openai.com`) |
+| `--base-url` | API base URL (default: `https://api.openai.com/v1`) |
 | `--model` | Model name/ID to evaluate |
 | `--api-key` | API key for authentication |
 | `--tasks` | Comma-separated task names (default: all 19) |

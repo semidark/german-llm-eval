@@ -379,6 +379,9 @@ class NERBIOLOnlyLoader(TaskLoader):
                         current_sent = []
                     continue
                 parts = stripped.split()
+                if len(parts) < max(self._text_col, self._tag_col) + 1:
+                    logger.warning(f"Skipping short row: {len(parts)} columns")
+                    continue
                 text = parts[self._text_col]
                 tag = parts[self._tag_col]
                 current_sent.append((text, tag))
