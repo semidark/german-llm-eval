@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 import os
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from loguru import logger
 from openai import APITimeoutError, APIConnectionError, AsyncOpenAI, RateLimitError
@@ -17,6 +20,9 @@ class APIClientConfig:
     temperature: float = 0.0
     max_retries: int = 3
     timeout_seconds: float = 60.0
+    cache_dir: Path | None = field(
+        default_factory=lambda: Path.home() / ".cache" / "german-llm-eval"
+    )
 
 
 @dataclass
@@ -63,12 +69,34 @@ class APIClient:
     def model(self) -> str:
         return self._config.model
 
+    @staticmethod
+    def _cache_key(
+        prompt_list: list[list[dict[str, str]]],
+        model: str,
+        temperature: float,
+    ) -> str:
+        raw = json.dumps(prompt_list, sort_keys=True) + f"|{model}|{temperature}"
+        return hashlib.sha256(raw.encode()).hexdigest()
+
     async def generate_batch(
         self,
         prompt_list: list[list[dict[str, str]]],
         concurrency: int = 5,
         progress_callback: Callable[[int], None] | None = None,
     ) -> BatchResult:
+        cache_key = self._cache_key(
+            prompt_list, self._config.model, self._config.temperature
+        )
+
+        if self._config.cache_dir:
+            cache_file = self._config.cache_dir / f"{cache_key}.json"
+            if cache_file.exists():
+                logger.info(f"Cache hit for batch {cache_key[:8]}")
+                data = json.loads(cache_file.read_text())
+                return BatchResult(
+                    responses=data["responses"], successes=data["successes"]
+                )
+
         semaphore = asyncio.Semaphore(concurrency)
         completed = 0
         responses: list[str] = ["" for _ in prompt_list]
@@ -90,4 +118,21 @@ class APIClient:
             for i, prompt in enumerate(prompt_list):
                 tg.create_task(_with_index(i, prompt), name=f"prompt-{i}")
 
-        return BatchResult(responses=responses, successes=successes)
+        result = BatchResult(responses=responses, successes=successes)
+
+        if self._config.cache_dir:
+            self._config.cache_dir.mkdir(parents=True, exist_ok=True)
+            cache_file = self._config.cache_dir / f"{cache_key}.json"
+            cache_file.write_text(
+                json.dumps(
+                    {
+                        "model": self._config.model,
+                        "temperature": self._config.temperature,
+                        "responses": responses,
+                        "successes": successes,
+                    }
+                )
+            )
+            logger.info(f"Cache saved for batch {cache_key[:8]}")
+
+        return result

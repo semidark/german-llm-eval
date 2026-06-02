@@ -75,6 +75,9 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--concurrency", type=int, default=5, help="Max concurrent API requests"
     )
     runtime.add_argument(
+        "--cache-dir", default=None, help="Directory for caching API responses"
+    )
+    runtime.add_argument(
         "--output",
         default=None,
         help="Path to save JSON scorecard (default: stdout only)",
@@ -105,6 +108,7 @@ def main() -> None:
         temperature=args.temperature,
         max_retries=args.max_retries,
         timeout_seconds=args.timeout,
+        cache_dir=Path(args.cache_dir).expanduser() if args.cache_dir else None,
     )
 
     evaluator = Evaluator(
