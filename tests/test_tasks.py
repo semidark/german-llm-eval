@@ -87,6 +87,13 @@ def test_qa_task_evaluate_unicode_normalized() -> None:
     assert result.accuracy == 1.0
 
 
+def test_qa_task_details_has_metric() -> None:
+    task = QATask(name="germanquad")
+    samples = [Sample(inputs={}, labels=["Berlin"])]
+    result = task.evaluate(["Berlin"], samples)
+    assert result.details["metric"] == "exact_match"
+
+
 # -- BinaryClassificationTask --
 
 
@@ -103,16 +110,33 @@ def test_binary_task_prompt() -> None:
 
 
 def test_binary_task_evaluate() -> None:
+    """Model returns mapped labels ('pos'/'neg'), raw data has '0'/'1'."""
     task = BinaryClassificationTask(
         name="test",
         description="Test",
         label_map={"0": "neg", "1": "pos"},
     )
     samples = [
-        Sample(inputs={}, labels=["pos"]),
-        Sample(inputs={}, labels=["neg"]),
+        Sample(inputs={}, labels=["1"]),
+        Sample(inputs={}, labels=["0"]),
     ]
     result = task.evaluate(["pos", "neg"], samples)
+    assert result.correct == 2
+    assert result.accuracy == 1.0
+
+
+def test_binary_task_evaluate_inverse_mapping() -> None:
+    """Model returns mapped label values that map back to raw labels."""
+    task = BinaryClassificationTask(
+        name="test",
+        description="Test",
+        label_map={"0": "neg", "1": "pos"},
+    )
+    samples = [
+        Sample(inputs={}, labels=["1"]),
+        Sample(inputs={}, labels=["0"]),
+    ]
+    result = task.evaluate(["POS", "NEG"], samples)
     assert result.correct == 2
     assert result.accuracy == 1.0
 
@@ -124,12 +148,23 @@ def test_binary_task_evaluate_partial() -> None:
         label_map={"0": "neg", "1": "pos"},
     )
     samples = [
-        Sample(inputs={}, labels=["pos"]),
-        Sample(inputs={}, labels=["neg"]),
+        Sample(inputs={}, labels=["1"]),
+        Sample(inputs={}, labels=["0"]),
     ]
     result = task.evaluate(["pos", "wrong"], samples)
     assert result.correct == 1
     assert result.accuracy == 0.5
+
+
+def test_binary_task_details_has_metric() -> None:
+    task = BinaryClassificationTask(
+        name="test",
+        description="Test",
+        label_map={"0": "neg", "1": "pos"},
+    )
+    samples = [Sample(inputs={}, labels=["1"])]
+    result = task.evaluate(["pos"], samples)
+    assert result.details["metric"] == "accuracy"
 
 
 # -- MultiClassificationTask --
@@ -162,6 +197,17 @@ def test_multi_task_evaluate() -> None:
     result = task.evaluate(["positive", "wrong", "neutral"], samples)
     assert result.correct == 2
     assert result.accuracy == 2 / 3
+
+
+def test_multi_task_details_has_metric() -> None:
+    task = MultiClassificationTask(
+        name="polarity",
+        description="Polarity",
+        classes=["positive", "negative", "neutral"],
+    )
+    samples = [Sample(inputs={}, labels=["positive"])]
+    result = task.evaluate(["positive"], samples)
+    assert result.details["metric"] == "accuracy"
 
 
 # -- NERPromptTask --
@@ -238,6 +284,7 @@ def test_ner_task_evaluate_f1() -> None:
     assert result.metric_label == "F1=1.0000"
     assert result.details["precision"] == 1.0
     assert result.details["recall"] == 1.0
+    assert result.details["metric"] == "entity_f1"
 
 
 def test_ner_task_evaluate_partial() -> None:
@@ -284,6 +331,17 @@ def test_text_pair_task_evaluate() -> None:
     assert result.accuracy == 0.5
 
 
+def test_text_pair_task_details_has_metric() -> None:
+    task = TextPairClassificationTask(
+        name="nli",
+        description="NLI",
+        classes=["entailment", "contradiction", "neutral"],
+    )
+    samples = [Sample(inputs={}, labels=["entailment"])]
+    result = task.evaluate(["entailment"], samples)
+    assert result.details["metric"] == "accuracy"
+
+
 # -- TextTripleClassificationTask --
 
 
@@ -301,6 +359,38 @@ def test_text_triple_task_prompt() -> None:
     assert "query" in prompt[0]["content"]
     assert "title" in prompt[0]["content"]
     assert "body" in prompt[0]["content"]
+
+
+def test_text_triple_task_prompt_no_typo() -> None:
+    """Prompt uses correct spelling 'Beurteile' not 'Beurtele'."""
+    task = TextTripleClassificationTask(
+        name="query_ad",
+        description="Query Ad",
+        classes=["relevant", "irrelevant"],
+    )
+    sample = Sample(
+        inputs={"text_a": "query", "text_b": "title", "text_c": "body"},
+        labels=["relevant"],
+    )
+    prompt = task.build_prompt(sample)
+    assert "Beurteile" in prompt[0]["content"]
+    assert "Beurtele" not in prompt[0]["content"]
+
+
+def test_text_triple_task_evaluate() -> None:
+    task = TextTripleClassificationTask(
+        name="query_ad",
+        description="Query Ad",
+        classes=["relevant", "irrelevant"],
+    )
+    samples = [
+        Sample(inputs={}, labels=["relevant"]),
+        Sample(inputs={}, labels=["irrelevant"]),
+    ]
+    result = task.evaluate(["relevant", "wrong"], samples)
+    assert result.correct == 1
+    assert result.accuracy == 0.5
+    assert result.details["metric"] == "accuracy"
 
 
 # -- Registry --

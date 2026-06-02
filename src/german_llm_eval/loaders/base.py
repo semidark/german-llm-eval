@@ -4,6 +4,8 @@ import abc
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
+
 
 class Sample:
     __slots__ = ("inputs", "labels")
@@ -50,7 +52,7 @@ class QALoader(TaskLoader):
 
         rows: list[Sample] = []
         for record in records:
-            answers = record.get("answers", {})
+            answers = record.get("answers") or {}
             answer_texts = (
                 answers.get("text", []) if isinstance(answers, dict) else str(answers)
             )
@@ -124,13 +126,14 @@ class TSVClassificationLoader(TaskLoader):
             candidate = data_dir / f"{split}{ext}"
             if candidate.exists():
                 return candidate
+        logger.warning(f"No {split} file found in {data_dir} (tried .tsv, .csv, .txt)")
         raise FileNotFoundError(
             f"No {split} file found in {data_dir} (tried .tsv, .csv, .txt)"
         )
 
 
 class CSVClassificationLoader(TSVClassificationLoader):
-    """CSV/semicolon-separated files."""
+    """CSV/semicolon-separated files, parsed with the csv module for safety."""
 
     def __init__(
         self,
@@ -145,6 +148,26 @@ class CSVClassificationLoader(TSVClassificationLoader):
             has_header=has_header,
             delimiter=delimiter,
         )
+
+    def load(self, data_dir: Path, split: str = "test") -> list[Sample]:
+        import csv
+
+        split_file = self._find_split_file(data_dir, split)
+        rows: list[Sample] = []
+        with open(split_file, encoding="utf-8") as fh:
+            reader = csv.reader(fh, delimiter=self._delimiter)
+            for i, parts in enumerate(reader):
+                if i == 0 and self._has_header:
+                    continue
+                if len(parts) <= max(self._text_col, self._label_col):
+                    continue
+                rows.append(
+                    Sample(
+                        inputs={"text": parts[self._text_col]},
+                        labels=[parts[self._label_col]],
+                    )
+                )
+        return rows
 
 
 class TXTTabClassificationLoader(TaskLoader):
@@ -183,6 +206,7 @@ class TXTTabClassificationLoader(TaskLoader):
             candidate = data_dir / f"{split}{ext}"
             if candidate.exists():
                 return candidate
+        logger.warning(f"No {split} file found in {data_dir} (tried .txt, .tsv, .csv)")
         raise FileNotFoundError(
             f"No {split} file found in {data_dir} (tried .txt, .tsv, .csv)"
         )
@@ -193,6 +217,62 @@ class TextPairLoader(TXTTabClassificationLoader):
 
     def __init__(self, label_col: int = 2) -> None:
         super().__init__(text_cols=[0, 1], label_col=label_col)
+
+
+class TSVTextPairLoader(TaskLoader):
+    """TSV text-pair classification with header support (PAWS-X).
+
+    Args:
+        text_a_col: 0-based column index for first text.
+        text_b_col: 0-based column index for second text.
+        label_col: 0-based column index for label.
+        has_header: Whether the first line is a header.
+    """
+
+    def __init__(
+        self,
+        text_a_col: int = 0,
+        text_b_col: int = 1,
+        label_col: int = 2,
+        has_header: bool = False,
+    ) -> None:
+        self._text_a_col = text_a_col
+        self._text_b_col = text_b_col
+        self._label_col = label_col
+        self._has_header = has_header
+
+    def load(self, data_dir: Path, split: str = "test") -> list[Sample]:
+        split_file = self._find_split_file(data_dir, split)
+        rows: list[Sample] = []
+        with open(split_file, encoding="utf-8") as fh:
+            lines = fh.readlines()
+        if self._has_header:
+            lines = lines[1:]
+        for line in lines:
+            parts = line.rstrip("\n").split("\t")
+            max_col = max(self._text_a_col, self._text_b_col, self._label_col)
+            if len(parts) <= max_col:
+                continue
+            rows.append(
+                Sample(
+                    inputs={
+                        "text_a": parts[self._text_a_col],
+                        "text_b": parts[self._text_b_col],
+                    },
+                    labels=[parts[self._label_col]],
+                )
+            )
+        return rows
+
+    def _find_split_file(self, data_dir: Path, split: str) -> Path:
+        for ext in (".tsv", ".txt", ".csv"):
+            candidate = data_dir / f"{split}{ext}"
+            if candidate.exists():
+                return candidate
+        logger.warning(f"No {split} file found in {data_dir} (tried .tsv, .txt, .csv)")
+        raise FileNotFoundError(
+            f"No {split} file found in {data_dir} (tried .tsv, .txt, .csv)"
+        )
 
 
 class TextTripleLoader(TXTTabClassificationLoader):
@@ -284,6 +364,7 @@ class NERBIOLOnlyLoader(TaskLoader):
                 candidates.append(matches[0])
 
         if not candidates:
+            logger.warning(f"No {split} file found in {data_dir}")
             raise FileNotFoundError(f"No {split} file found in {data_dir}")
 
         sentences: list[list[tuple[str, str]]] = []
@@ -306,48 +387,3 @@ class NERBIOLOnlyLoader(TaskLoader):
             sentences.append(current_sent)
 
         return self._extract_entities(sentences)
-
-
-class CONLLParser(NERBIOLOnlyLoader):
-    """conllu format loader (UP dependency/POS tagging)."""
-
-    def __init__(self, text_col: int = 1, tag_col: int = 3) -> None:
-        super().__init__(text_col=text_col, tag_col=tag_col)
-
-    def load(self, data_dir: Path, split: str = "test") -> list[Sample]:
-        import glob as _glob
-
-        files = sorted(data_dir.glob(f"{split}*.conllu"))
-        if not files:
-            files = sorted(_glob.glob(str(data_dir / "*")))
-            files = [Path(f) for f in files if split in f]
-
-        all_samples: list[Sample] = []
-        for fpath in files:
-            with open(fpath, encoding="utf-8") as fh:
-                lines = fh.readlines()
-
-            sentences: list[list[tuple[str, str]]] = []
-            current_sent: list[tuple[str, str]] = []
-            for line in lines:
-                stripped = line.strip()
-                if not stripped or stripped.startswith("#"):
-                    if current_sent:
-                        sentences.append(current_sent)
-                        current_sent = []
-                    continue
-                if stripped.startswith("-") or not stripped[0].isdigit():
-                    continue
-                parts = stripped.split("\t")
-                if len(parts) > max(self._text_col, self._tag_col):
-                    current_sent.append((parts[self._text_col], parts[self._tag_col]))
-            if current_sent:
-                sentences.append(current_sent)
-
-            samples: list[Sample] = []
-            for sent in sentences:
-                text = " ".join(t for t, _ in sent)
-                tags = [tag for _, tag in sent]
-                samples.append(Sample(inputs={"text": text}, labels=tags))
-            all_samples.extend(samples)
-        return all_samples

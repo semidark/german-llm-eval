@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -76,7 +77,7 @@ class QATask(TaskDefinition):
             correct=exact_match,
             total=len(samples),
             accuracy=accuracy,
-            details={"exact_match_rate": accuracy},
+            details={"exact_match_rate": accuracy, "metric": self.metric},
         )
 
 
@@ -94,6 +95,13 @@ class BinaryClassificationTask(TaskDefinition):
     ) -> None:
         super().__init__(name=name, description=description, metric=self.metric)
         self._label_map = label_map
+        if instructions:
+            warnings.warn(
+                "The 'instructions' parameter is deprecated and bypasses sample data "
+                "interpolation. Remove it to use the default prompt template.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._instructions = instructions
 
     def build_prompt(self, sample: Sample) -> list[dict[str, str]]:
@@ -109,11 +117,12 @@ class BinaryClassificationTask(TaskDefinition):
 
     def evaluate(self, responses: list[str], samples: list[Sample]) -> TaskResult:
         correct = 0
+        inverse_map = {v.lower(): k for k, v in self._label_map.items()}
         for resp, sample in zip(responses, samples):
             normalized_resp = resp.strip().lower()
-            label_set = {lb.strip().lower() for lb in sample.labels}
-            mapped = {v.lower() for v in self._label_map.values()}
-            if normalized_resp in label_set or normalized_resp in mapped:
+            raw_label = sample.labels[0].strip()
+            mapped = inverse_map.get(normalized_resp, normalized_resp)
+            if mapped == raw_label.lower():
                 correct += 1
 
         total = len(samples)
@@ -122,7 +131,7 @@ class BinaryClassificationTask(TaskDefinition):
             correct=correct,
             total=total,
             accuracy=correct / total if total else 0.0,
-            details={},
+            details={"metric": self.metric},
         )
 
 
@@ -140,6 +149,13 @@ class MultiClassificationTask(TaskDefinition):
     ) -> None:
         super().__init__(name=name, description=description, metric=self.metric)
         self._classes = classes
+        if instructions:
+            warnings.warn(
+                "The 'instructions' parameter is deprecated and bypasses sample data "
+                "interpolation. Remove it to use the default prompt template.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._instructions = instructions
 
     def build_prompt(self, sample: Sample) -> list[dict[str, str]]:
@@ -167,7 +183,7 @@ class MultiClassificationTask(TaskDefinition):
             correct=correct,
             total=total,
             accuracy=correct / total if total else 0.0,
-            details={"classes": self._classes},
+            details={"classes": self._classes, "metric": self.metric},
         )
 
 
@@ -255,6 +271,7 @@ class NERPromptTask(TaskDefinition):
                 "recall": rec,
                 "f1": f1,
                 "entity_types": self._entity_types,
+                "metric": self.metric,
             },
         )
 
@@ -273,6 +290,13 @@ class TextPairClassificationTask(TaskDefinition):
     ) -> None:
         super().__init__(name=name, description=description, metric=self.metric)
         self._classes = classes
+        if instructions:
+            warnings.warn(
+                "The 'instructions' parameter is deprecated and bypasses sample data "
+                "interpolation. Remove it to use the default prompt template.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._instructions = instructions
 
     def build_prompt(self, sample: Sample) -> list[dict[str, str]]:
@@ -292,15 +316,15 @@ class TextPairClassificationTask(TaskDefinition):
         correct = 0
         for resp, sample in zip(responses, samples):
             normalized_resp = resp.strip().lower()
-            normalized_labels = {lb.strip().lower() for lb in sample.labels}
-            if normalized_resp in normalized_labels:
+            normalized_label = sample.labels[0].strip().lower()
+            if normalized_resp == normalized_label:
                 correct += 1
         return TaskResult(
             name=self.name,
             correct=correct,
             total=len(samples),
             accuracy=correct / len(samples) if samples else 0.0,
-            details={"classes": self._classes},
+            details={"classes": self._classes, "metric": self.metric},
         )
 
 
@@ -314,7 +338,7 @@ class TextTripleClassificationTask(TextPairClassificationTask):
         class_options = " / ".join(self._classes)
 
         prompt_text = (
-            f"Beurtele ob die folgende Suchanfrage zu einer guten Anzeige passt.\n\n"
+            f"Beurteile ob die folgende Suchanfrage zu einer guten Anzeige passt.\n\n"
             f"Suchanfrage: {text_a}\n"
             f"Anzeigentitel: {text_b}\n"
             f"Anzeigentext: {text_c}\n\n"

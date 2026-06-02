@@ -30,8 +30,8 @@ def compute_f1_entities(
 ) -> tuple[float, float, float]:
     tp = fp = fn = 0
     for pred_set, label_set in zip(predictions, labels):
-        pred_norm = {(t, e.lower()) for t, e in pred_set}
-        label_norm = {(t, e.lower()) for t, e in label_set}
+        pred_norm = {(t.lower(), e.lower()) for t, e in pred_set}
+        label_norm = {(t.lower(), e.lower()) for t, e in label_set}
         tp += len(pred_norm & label_norm)
         fp += len(pred_norm - label_norm)
         fn += len(label_norm - pred_norm)

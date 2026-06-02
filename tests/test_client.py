@@ -14,7 +14,7 @@ _REQ = httpx.Request("GET", "http://test")
 
 @pytest.mark.asyncio
 async def test_generate_batch_basic() -> None:
-    config = APIClientConfig(model="test-model")
+    config = APIClientConfig(model="test-model", api_key="sk-test-key")
     client = APIClient(config)
 
     prompts = [
@@ -36,7 +36,7 @@ async def test_generate_batch_basic() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_batch_progress_callback() -> None:
-    config = APIClientConfig(model="test-model")
+    config = APIClientConfig(model="test-model", api_key="sk-test-key")
     client = APIClient(config)
 
     prompts = [
@@ -63,7 +63,7 @@ async def test_generate_batch_progress_callback() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_retry_success() -> None:
-    config = APIClientConfig(model="test-model", max_retries=3)
+    config = APIClientConfig(model="test-model", api_key="sk-test-key", max_retries=3)
     client = APIClient(config)
 
     call_count = 0
@@ -87,7 +87,7 @@ async def test_generate_retry_success() -> None:
 
 @pytest.mark.asyncio
 async def test_generate_retry_exhausted() -> None:
-    config = APIClientConfig(model="test-model", max_retries=2)
+    config = APIClientConfig(model="test-model", api_key="sk-test-key", max_retries=2)
     client = APIClient(config)
 
     with patch.object(
@@ -98,3 +98,10 @@ async def test_generate_retry_exhausted() -> None:
         with patch.object(asyncio, "sleep", new=AsyncMock()):
             with pytest.raises(RuntimeError, match="Failed after 2 retries"):
                 await client.generate([{"role": "user", "content": "test"}])
+
+
+def test_api_key_validation() -> None:
+    """Missing API key raises ValueError."""
+    config = APIClientConfig(model="test-model", api_key=None)
+    with pytest.raises(ValueError, match="API key"):
+        APIClient(config)

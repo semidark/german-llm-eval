@@ -5,6 +5,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from loguru import logger
 from openai import APITimeoutError, APIConnectionError, AsyncOpenAI, RateLimitError
 
 
@@ -21,7 +22,11 @@ class APIClientConfig:
 class APIClient:
     def __init__(self, config: APIClientConfig | None = None) -> None:
         self._config = config or APIClientConfig()
-        api_key = self._config.api_key or os.environ.get("OPENAI_API_KEY", "sk-")
+        api_key = self._config.api_key or os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError(
+                "No API key provided. Use --api-key or set $OPENAI_API_KEY."
+            )
         self._client = AsyncOpenAI(
             base_url=self._config.base_url,
             api_key=api_key,
@@ -41,11 +46,16 @@ class APIClient:
             except (APIConnectionError, RateLimitError, APITimeoutError) as exc:
                 last_err = exc
                 if attempt < self._config.max_retries:
+                    logger.warning(f"Request failed (attempt {attempt}): {exc}")
                     await asyncio.sleep(min(2**attempt, 10))
 
         raise RuntimeError(
             f"Failed after {self._config.max_retries} retries"
         ) from last_err
+
+    @property
+    def model(self) -> str:
+        return self._config.model
 
     async def generate_batch(
         self,
@@ -55,15 +65,18 @@ class APIClient:
     ) -> list[str]:
         semaphore = asyncio.Semaphore(concurrency)
         completed = 0
+        results: list[str] = ["" for _ in prompt_list]
 
-        async def _with_limit(prompt: list[dict[str, str]]) -> str:
+        async def _with_index(idx: int, prompt: list[dict[str, str]]) -> None:
             nonlocal completed
             async with semaphore:
-                result = await self.generate(prompt)
+                results[idx] = await self.generate(prompt)
                 completed += 1
                 if progress_callback:
                     progress_callback(completed)
-                return result
 
-        tasks = [_with_limit(p) for p in prompt_list]
-        return await asyncio.gather(*tasks, return_exceptions=False)
+        async with asyncio.TaskGroup() as tg:
+            for i, prompt in enumerate(prompt_list):
+                tg.create_task(_with_index(i, prompt), name=f"prompt-{i}")
+
+        return results

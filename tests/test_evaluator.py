@@ -20,7 +20,7 @@ async def test_evaluator_run_basic(tmp_path: Path) -> None:
     )
 
     evaluator = Evaluator(
-        api_config=APIClientConfig(model="fake"),
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
         data_root=tmp_path,
     )
 
@@ -40,7 +40,7 @@ async def test_evaluator_run_basic(tmp_path: Path) -> None:
 async def test_evaluator_run_unknown_task(tmp_path: Path) -> None:
     """Unknown task name is skipped gracefully."""
     evaluator = Evaluator(
-        api_config=APIClientConfig(model="fake"),
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
         data_root=tmp_path,
     )
 
@@ -55,7 +55,7 @@ async def test_evaluator_run_unknown_task(tmp_path: Path) -> None:
 async def test_evaluator_run_missing_data(tmp_path: Path) -> None:
     """Missing data directory produces skip, no crash."""
     evaluator = Evaluator(
-        api_config=APIClientConfig(model="fake"),
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
         data_root=tmp_path,
     )
 
@@ -71,7 +71,7 @@ async def test_evaluator_max_samples(tmp_path: Path) -> None:
     (tmp_path / "Germeval" / "2017" / "test.tsv").write_text(rows)
 
     evaluator = Evaluator(
-        api_config=APIClientConfig(model="fake"),
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
         data_root=tmp_path,
         max_samples=10,
     )
@@ -87,7 +87,9 @@ async def test_evaluator_max_samples(tmp_path: Path) -> None:
 
 def test_evaluator_print_scorecard(capsys) -> None:
     """print_scorecard renders without error."""
-    evaluator = Evaluator(api_config=APIClientConfig(model="fake"))
+    evaluator = Evaluator(
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key")
+    )
     results = [
         TaskResult(
             name="polarity",
@@ -114,7 +116,9 @@ def test_evaluator_print_scorecard(capsys) -> None:
 
 def test_evaluator_to_json() -> None:
     """to_json produces valid JSON-serializable dict."""
-    evaluator = Evaluator(api_config=APIClientConfig(model="gpt-4o"))
+    evaluator = Evaluator(
+        api_config=APIClientConfig(model="gpt-4o", api_key="sk-test-key")
+    )
     results = [
         TaskResult(
             name="polarity",
@@ -133,7 +137,9 @@ def test_evaluator_to_json() -> None:
 
 def test_evaluator_save_results(tmp_path: Path) -> None:
     """save_results writes valid JSON file."""
-    evaluator = Evaluator(api_config=APIClientConfig(model="fake"))
+    evaluator = Evaluator(
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key")
+    )
     results = [
         TaskResult(
             name="polarity",
@@ -158,7 +164,7 @@ async def test_evaluator_ner_task(tmp_path: Path) -> None:
     )
 
     evaluator = Evaluator(
-        api_config=APIClientConfig(model="fake"),
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
         data_root=tmp_path,
     )
 
@@ -169,3 +175,46 @@ async def test_evaluator_ner_task(tmp_path: Path) -> None:
     assert len(results) == 1
     assert results[0].name == "ner_wiki_news"
     assert results[0].accuracy == 1.0
+
+
+@pytest.mark.asyncio
+async def test_evaluator_api_exception_group_skip(tmp_path: Path) -> None:
+    """ExceptionGroup from TaskGroup skips task gracefully instead of crashing."""
+    (tmp_path / "Germeval" / "2017").mkdir(parents=True)
+    (tmp_path / "Germeval" / "2017" / "test.tsv").write_text(
+        "id\tGut\t-src\tpositive\nid\tSchlecht\t-src\tnegative\n"
+    )
+
+    evaluator = Evaluator(
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
+        data_root=tmp_path,
+    )
+
+    async def raise_exception_group(*args: object, **kwargs: object) -> None:
+        raise ExceptionGroup("api failures", [RuntimeError("connection timeout")])
+
+    with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
+        mock.side_effect = raise_exception_group
+        results = await evaluator.run(task_names=["polarity"], split="test")
+
+    assert len(results) == 0
+
+
+@pytest.mark.asyncio
+async def test_evaluator_metric_in_details(tmp_path: Path) -> None:
+    """TaskResult.details contains correct metric name."""
+    (tmp_path / "Germeval" / "2017").mkdir(parents=True)
+    (tmp_path / "Germeval" / "2017" / "test.tsv").write_text(
+        "id\tGut\t-src\tpositive\n"
+    )
+
+    evaluator = Evaluator(
+        api_config=APIClientConfig(model="fake", api_key="sk-test-key"),
+        data_root=tmp_path,
+    )
+
+    with patch.object(evaluator._api, "generate_batch", new_callable=AsyncMock) as mock:
+        mock.return_value = ["positive"]
+        results = await evaluator.run(task_names=["polarity"], split="test")
+
+    assert results[0].details["metric"] == "accuracy"

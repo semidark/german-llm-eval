@@ -8,6 +8,7 @@ dependencies = [
     "openai>=1.0.0",
     "rich",
     "tqdm",
+    "loguru>=0.7.3",
 ]
 
 [project.scripts]

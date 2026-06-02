@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from loguru import logger
 from rich.console import Console
 from rich.table import Table
 from tqdm import tqdm
@@ -46,6 +47,7 @@ class Evaluator:
             try:
                 samples = loader.load(data_dir, split=split)
             except FileNotFoundError as exc:
+                logger.warning(f"Skipping {task_name}: {exc}")
                 console.print(f"[yellow]Skipping {task_name}: {exc}[/yellow]")
                 continue
 
@@ -53,11 +55,13 @@ class Evaluator:
                 samples = samples[: self._max_samples]
 
             if not samples:
+                logger.warning(f"Skipping {task_name}: no samples loaded")
                 console.print(
                     f"[yellow]Skipping {task_name}: no samples loaded[/yellow]"
                 )
                 continue
 
+            logger.info(f"Running {task_def.name}: {len(samples)} samples")
             console.print(
                 f"[bold cyan]{task_def.name}[/bold cyan] "
                 f"({len(samples)} samples, metric={task_def.metric})"
@@ -66,14 +70,24 @@ class Evaluator:
             start = time.time()
             prompt_list = [task_def.build_prompt(s) for s in samples]
 
-            with tqdm(total=len(prompt_list), desc=task_name) as pbar:
+            try:
+                with tqdm(total=len(prompt_list), desc=task_name) as pbar:
 
-                def _progress(n: int) -> None:
-                    pbar.update(n - pbar.n)
+                    def _progress(n: int) -> None:
+                        pbar.update(n - pbar.n)
 
-                responses = await self._api.generate_batch(
-                    prompt_list, self._concurrency, _progress
+                    responses = await self._api.generate_batch(
+                        prompt_list, self._concurrency, _progress
+                    )
+            except BaseExceptionGroup as exc:
+                errors = exc.exceptions
+                logger.warning(
+                    f"Skipping {task_name}: {len(errors)} API request(s) failed: {errors[0]}"
                 )
+                console.print(
+                    f"[yellow]Skipping {task_name}: {len(errors)} API request(s) failed[/yellow]"
+                )
+                continue
 
             elapsed = time.time() - start
             result: TaskResult = task_def.evaluate(responses, samples)  # type: ignore[assignment]
@@ -126,7 +140,7 @@ class Evaluator:
 
     def to_json(self, results: list[TaskResult]) -> dict[str, Any]:
         return {
-            "model": self._api._config.model,
+            "model": self._api.model,
             "tasks": [r.to_dict() for r in results],
             "mean_score": (
                 sum(r.accuracy for r in results) / len(results) if results else 0.0

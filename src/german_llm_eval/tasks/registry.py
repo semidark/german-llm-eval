@@ -7,6 +7,7 @@ from german_llm_eval.loaders.base import (
     TextPairLoader,
     TextTripleLoader,
     TSVClassificationLoader,
+    TSVTextPairLoader,
 )
 from german_llm_eval.tasks.base import (
     BinaryClassificationTask,
@@ -64,12 +65,12 @@ register(
 
 register(
     "pawsx",
-    BinaryClassificationTask(
+    TextPairClassificationTask(
         "pawsx",
         "PAWS-X Paraphrase Detection (German)",
-        {"1": "true", "0": "false"},
+        ["true", "false"],
     ),
-    TSVClassificationLoader(text_col=1, label_col=3, has_header=True),
+    TSVTextPairLoader(text_a_col=1, text_b_col=2, label_col=3, has_header=True),
     "PAWSX",
 )
 
@@ -86,10 +87,10 @@ register(
 
 register(
     "quest_ans",
-    BinaryClassificationTask(
+    TextPairClassificationTask(
         "quest_ans",
         "Question Answering Relevance (German)",
-        {"1": "true", "0": "false"},
+        ["true", "false"],
     ),
     TextPairLoader(label_col=2),
     "XGlue/Quest_Ans",
@@ -128,9 +129,9 @@ register(
 register(
     "polarity",
     MultiClassificationTask(
-        "polarity",
-        "Sentiment Polarity (German)",
-        classes=["positive", "negative", "neutral"],
+        name="polarity",
+        description="Sentiment classification (positive/negative/neutral)",
+        classes=["positiv", "negativ", "neutral"],
     ),
     TSVClassificationLoader(text_col=1, label_col=3, has_header=False),
     "Germeval/2017",
@@ -211,7 +212,9 @@ register(
 
 register(
     "ner_legal",
-    NERPromptTask("ner_legal", entity_types=[]),
+    NERPromptTask(
+        "ner_legal", entity_types=["PER", "LOC", "ORG", "GS", "RV", "UR", "LL"]
+    ),
     NERBIOLOnlyLoader(text_col=0, tag_col=1),
     "NER/Legal",
 )

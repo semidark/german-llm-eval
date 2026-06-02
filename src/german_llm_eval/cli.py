@@ -7,6 +7,7 @@ import asyncio
 import sys
 from pathlib import Path
 
+from loguru import logger
 from rich.console import Console
 
 from german_llm_eval.client import APIClientConfig
@@ -16,13 +17,12 @@ from german_llm_eval.tasks.registry import ALL_TASKS
 _cli_console = Console(stderr=True)
 
 
-def main() -> None:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="german-llm-eval",
         description="Evaluate LLMs on German benchmark datasets via OpenAI-compatible API",
     )
 
-    # API settings
     api = parser.add_argument_group("API")
     api.add_argument(
         "--base-url",
@@ -42,7 +42,6 @@ def main() -> None:
         "--max-retries", type=int, default=3, help="Max retries per request"
     )
 
-    # Data settings
     data = parser.add_argument_group("Data")
     data.add_argument(
         "--data-root",
@@ -65,7 +64,6 @@ def main() -> None:
         help="Max samples per task (useful for quick testing)",
     )
 
-    # Runtime settings
     runtime = parser.add_argument_group("Runtime")
     runtime.add_argument(
         "--concurrency", type=int, default=5, help="Max concurrent API requests"
@@ -81,7 +79,14 @@ def main() -> None:
         help="List all available tasks and exit",
     )
 
-    args = parser.parse_args()
+    return parser.parse_args(argv)
+
+
+def main() -> None:
+    args = parse_args()
+
+    if args.tasks:
+        args.tasks = [t.strip() for task in args.tasks for t in task.split(",")]
 
     if args.list_tasks:
         console_list_tasks()
@@ -105,6 +110,7 @@ def main() -> None:
     results = asyncio.run(evaluator.run(task_names=args.tasks, split=args.split))
 
     if not results:
+        logger.error("No tasks completed. Check data paths and task availability.")
         _cli_console.print(
             "No tasks completed. Check data paths and task availability.",
             style="red",
