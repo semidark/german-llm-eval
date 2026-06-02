@@ -158,6 +158,15 @@ def test_ner_bio_loader_no_entities(tmp_path: Path) -> None:
     assert samples[0].labels == ["<no-entities>"]
 
 
+def test_ner_bio_loader_multiple_sentences(tmp_path: Path) -> None:
+    (tmp_path / "test.txt").write_text("Nico\tB-PER\n\nBerlin\tB-LOC\n")
+    loader = NERBIOLOnlyLoader(text_col=0, tag_col=1)
+    samples = loader.load(tmp_path, split="test")
+    assert len(samples) == 2
+    assert "PER: Nico" in samples[0].labels
+    assert "LOC: Berlin" in samples[1].labels
+
+
 def test_ner_bio_loader_short_row_skipped(tmp_path: Path) -> None:
     (tmp_path / "test.txt").write_text("Nico\tB-PER\norphan\nBerlin\tB-LOC\n\n")
     loader = NERBIOLOnlyLoader(text_col=0, tag_col=1)
