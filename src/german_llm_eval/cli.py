@@ -41,6 +41,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     api.add_argument(
         "--max-retries", type=int, default=3, help="Max retries per request"
     )
+    api.add_argument(
+        "--timeout",
+        type=float,
+        default=60.0,
+        help="Request timeout in seconds (default: 60)",
+    )
 
     data = parser.add_argument_group("Data")
     data.add_argument(
@@ -98,6 +104,7 @@ def main() -> None:
         model=args.model,
         temperature=args.temperature,
         max_retries=args.max_retries,
+        timeout_seconds=args.timeout,
     )
 
     evaluator = Evaluator(

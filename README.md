@@ -20,6 +20,7 @@ uv run german-llm-eval \
   --model qwen3.5:9b \
   --tasks polarity,germanquad,nli \
   --max-samples 20 \
+  --timeout 300 \
   --concurrency 2
 ```
 
@@ -34,6 +35,7 @@ uv run german-llm-eval \
   --base-url http://localhost:11434/v1 \
   --api-key ollama \
   --model qwen3.5:9b \
+  --timeout 300 \
   --concurrency 2 \
   --output results/qwen3.5-9b.json
 ```
@@ -72,6 +74,7 @@ uv run german-llm-eval --list-tasks
 | `--split` | Data split to use (default: `test`) |
 | `--max-samples` | Max samples per task (0 = unlimited) |
 | `--temperature` | Sampling temperature (default: `0.0`) |
+| `--timeout` | Request timeout in seconds (default: `60`) |
 | `--concurrency` | Parallel API requests (default: `5`) |
 | `--output` | Path for JSON results export |
 
