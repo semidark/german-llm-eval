@@ -78,6 +78,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--cache-dir", default=None, help="Directory for caching API responses"
     )
     runtime.add_argument(
+        "--debug-dir",
+        default=None,
+        help="Directory for streaming debug output (one file per request)",
+    )
+    runtime.add_argument(
+        "--max-response-chars",
+        type=int,
+        default=4096,
+        help="Abort generation if response exceeds this many chars (default: 4096)",
+    )
+    runtime.add_argument(
         "--output",
         default=None,
         help="Path to save JSON scorecard (default: stdout only)",
@@ -109,6 +120,8 @@ def main() -> None:
         max_retries=args.max_retries,
         timeout_seconds=args.timeout,
         cache_dir=Path(args.cache_dir).expanduser() if args.cache_dir else None,
+        debug_dir=Path(args.debug_dir).expanduser() if args.debug_dir else None,
+        max_response_chars=args.max_response_chars,
     )
 
     evaluator = Evaluator(

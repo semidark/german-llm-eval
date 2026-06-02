@@ -12,6 +12,15 @@ from loguru import logger
 from openai import APITimeoutError, APIConnectionError, AsyncOpenAI, RateLimitError
 
 
+class GenerationLimitError(RuntimeError):
+    """Raised when a streaming response exceeds the character threshold."""
+
+    def __init__(self, limit: int, actual_chars: int) -> None:
+        self.limit = limit
+        self.actual_chars = actual_chars
+        super().__init__(f"Response exceeded {limit} chars, aborted at {actual_chars}")
+
+
 @dataclass
 class APIClientConfig:
     base_url: str = "https://api.openai.com/v1"
@@ -23,6 +32,8 @@ class APIClientConfig:
     cache_dir: Path | None = field(
         default_factory=lambda: Path.home() / ".cache" / "german-llm-eval"
     )
+    debug_dir: Path | None = None
+    max_response_chars: int = 4096
 
 
 @dataclass
@@ -45,16 +56,34 @@ class APIClient:
             timeout=self._config.timeout_seconds,
         )
 
-    async def generate(self, messages: list[dict[str, str]]) -> str:
+    async def _generate_streaming(
+        self,
+        messages: list[dict[str, str]],
+        debug_file: Path | None = None,
+    ) -> str:
         last_err: Exception | None = None
         for attempt in range(1, self._config.max_retries + 1):
             try:
-                resp = await self._client.chat.completions.create(
+                result: str = ""
+                stream = await self._client.chat.completions.create(
                     model=self._config.model,
                     messages=messages,
                     temperature=self._config.temperature,
+                    stream=True,
                 )
-                return resp.choices[0].message.content or ""
+                async for chunk in stream:
+                    content = chunk.choices[0].delta.content
+                    if content is not None:
+                        result += content
+                        if debug_file:
+                            debug_file.write_text(result)
+                        if len(result) > self._config.max_response_chars:
+                            raise GenerationLimitError(
+                                self._config.max_response_chars, len(result)
+                            )
+                return result or ""
+            except GenerationLimitError:
+                raise
             except (APIConnectionError, RateLimitError, APITimeoutError) as exc:
                 last_err = exc
                 if attempt < self._config.max_retries:
@@ -64,6 +93,9 @@ class APIClient:
         raise RuntimeError(
             f"Failed after {self._config.max_retries} retries"
         ) from last_err
+
+    async def generate(self, messages: list[dict[str, str]]) -> str:
+        return await self._generate_streaming(messages)
 
     @property
     def model(self) -> str:
@@ -105,8 +137,14 @@ class APIClient:
         async def _with_index(idx: int, prompt: list[dict[str, str]]) -> None:
             nonlocal completed
             async with semaphore:
+                debug_file = None
+                if self._config.debug_dir:
+                    self._config.debug_dir.mkdir(parents=True, exist_ok=True)
+                    debug_file = self._config.debug_dir / f"req-{idx}.txt"
                 try:
-                    responses[idx] = await self.generate(prompt)
+                    responses[idx] = await self._generate_streaming(
+                        prompt, debug_file=debug_file
+                    )
                     successes[idx] = True
                 except Exception as exc:
                     logger.warning(f"Request {idx} failed after retries: {exc}")
