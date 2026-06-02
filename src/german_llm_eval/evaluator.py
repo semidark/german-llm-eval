@@ -67,6 +67,7 @@ class Evaluator:
             prompt_list = [task_def.build_prompt(s) for s in samples]
 
             with tqdm(total=len(prompt_list), desc=task_name) as pbar:
+
                 def _progress(n: int) -> None:
                     pbar.update(n - pbar.n)
 
@@ -80,9 +81,7 @@ class Evaluator:
 
             if result.metric_label:
                 console.print(
-                    f"  [green]✓[/green] "
-                    f"{result.metric_label} "
-                    f"in {elapsed:.1f}s"
+                    f"  [green]✓[/green] {result.metric_label} in {elapsed:.1f}s"
                 )
             else:
                 console.print(

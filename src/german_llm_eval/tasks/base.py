@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import re
+import unicodedata
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 from german_llm_eval.loaders.base import Sample
+from german_llm_eval.metrics import TaskResult, compute_f1_entities
 
 
 @dataclass
@@ -19,7 +22,17 @@ class TaskDefinition(ABC):
     def evaluate(self, responses: list[str], samples: list[Sample]) -> "TaskResult": ...
 
 
-from german_llm_eval.metrics import TaskResult, compute_f1_entities  # noqa: E402
+def _normalize_text(text: str) -> str:
+    """Normalize text for QA exact match comparison.
+
+    Steps: NFKC decomposition, lowercase, German ß→ss, strip punctuation, collapse whitespace.
+    """
+    text = unicodedata.normalize("NFKC", text)
+    text = text.lower().strip()
+    text = text.replace("ß", "ss")
+    text = re.sub(r"[^\w\s]", "", text)
+    text = re.sub(r"\s+", " ", text)
+    return text
 
 
 class QATask(TaskDefinition):
@@ -52,9 +65,9 @@ class QATask(TaskDefinition):
     def evaluate(self, responses: list[str], samples: list[Sample]) -> TaskResult:
         exact_match = 0
         for resp, sample in zip(responses, samples):
-            normalized_resp = resp.strip().lower()
-            normalized_labels = {lb.strip().lower() for lb in sample.labels}
-            if normalized_resp in normalized_labels:
+            norm_resp = _normalize_text(resp)
+            norm_labels = {_normalize_text(lb) for lb in sample.labels}
+            if norm_resp in norm_labels:
                 exact_match += 1
 
         accuracy = exact_match / len(samples) if samples else 0.0
@@ -205,9 +218,15 @@ class NERPromptTask(TaskDefinition):
             line = line.strip()
             if not line or line == "<no-entities>":
                 continue
+            # Primary: "TYPE: entity" format
             if ":" in line:
                 typ, ent = line.split(":", 1)
                 entities.append((typ.strip(), ent.strip()))
+            # Fallback: regex for "(TYPE) entity" or "entity (TYPE)" patterns
+            elif m := re.match(r"\((\w+)\)\s*(.+)", line):
+                entities.append((m.group(1), m.group(2).strip()))
+            elif m := re.match(r"(.+?)\s*\((\w+)\)$", line):
+                entities.append((m.group(2), m.group(1).strip()))
         return entities
 
     def _parse_labels(self, labels: list[str]) -> list[tuple[str, str]]:

@@ -21,7 +21,9 @@ async def test_generate_batch_basic() -> None:
     mock_resp = AsyncMock()
     mock_resp.choices[0].message.content = "response"
 
-    with patch.object(client._client.chat.completions, "create", new=AsyncMock(return_value=mock_resp)):
+    with patch.object(
+        client._client.chat.completions, "create", new=AsyncMock(return_value=mock_resp)
+    ):
         results = await client.generate_batch(prompts, concurrency=2)
 
     assert len(results) == 2
@@ -44,7 +46,9 @@ async def test_generate_batch_progress_callback() -> None:
 
     progress_calls: list[int] = []
 
-    with patch.object(client._client.chat.completions, "create", new=AsyncMock(return_value=mock_resp)):
+    with patch.object(
+        client._client.chat.completions, "create", new=AsyncMock(return_value=mock_resp)
+    ):
         await client.generate_batch(
             prompts, concurrency=2, progress_callback=lambda n: progress_calls.append(n)
         )
@@ -69,9 +73,7 @@ async def test_generate_retry_success() -> None:
         resp.choices[0].message.content = "recovered"
         return resp
 
-    with patch.object(
-        client._client.chat.completions, "create", new=flaky_create
-    ):
+    with patch.object(client._client.chat.completions, "create", new=flaky_create):
         with patch.object(asyncio, "sleep", new=AsyncMock()):
             result = await client.generate([{"role": "user", "content": "test"}])
 

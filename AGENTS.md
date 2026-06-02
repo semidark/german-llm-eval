@@ -25,7 +25,7 @@ All data lives at `~/src/SuperGLEBer/data`. The `--data-root` CLI flag overrides
 ```
 src/german_llm_eval/
 ├── cli.py              # argparse entry point, wired as console script
-├── client.py           # async APIClient (semaphore batching, retry/backoff) + SyncAPIClient wrapper
+├── client.py           # async APIClient (semaphore batching, retry/backoff)
 ├── evaluator.py        # Evaluator class: task runner, rich scorecard table, JSON export
 ├── loaders/base.py     # format-specific data loaders
 ├── metrics.py          # accuracy, token F1, entity F1
@@ -61,7 +61,11 @@ src/german_llm_eval/
 ## Remaining Work
 - [ ] YAML config file support for reusable eval setups
 - [x] NER evaluation: entity-level F1 implemented in `NERPromptTask`.
-  **Note:** Response parser (`TYP: ENTITÄT` per line) is basic and may break with verbose model output.
-- [ ] QA evaluation: EM-normalized scoring against gold answers (basic exact match already implemented)
+  **Note:** Response parser supports `TYPE: ENTITY`, `(TYPE) entity`, and `entity (TYPE)` formats.
+- [x] QA evaluation: normalized exact match with NFKC, `ß`→`ss`, punctuation stripping, whitespace collapsing.
 - [ ] Mock API backend for offline testing
 - [ ] End-to-end integration test with real API
+
+## Changes Log
+- **2025-06-02**: Removed `SyncAPIClient` (dead code), added NER regex fallback parser,
+  QA normalized exact match, `QALoader` `.get()` safety, removed unused `datasets`/`pyyaml` deps.

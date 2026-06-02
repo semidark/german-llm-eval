@@ -10,6 +10,7 @@ from german_llm_eval.metrics import (
 
 # -- TaskResult --
 
+
 def test_task_result_to_dict() -> None:
     r = TaskResult(
         name="polarity",
@@ -40,6 +41,7 @@ def test_task_result_default_metric_label() -> None:
 
 
 # -- compute_accuracy --
+
 
 def test_compute_accuracy_all_correct() -> None:
     preds = ["pos", "neg", "neu"]
@@ -74,6 +76,7 @@ def test_compute_accuracy_whitespace() -> None:
 
 # -- compute_f1_tokens --
 
+
 def test_compute_f1_tokens_perfect() -> None:
     pred = ["hello", "world"]
     labels = ["hello", "world"]
@@ -102,6 +105,7 @@ def test_compute_f1_tokens_empty_label() -> None:
 
 
 # -- compute_f1_entities --
+
 
 def test_compute_f1_entities_perfect() -> None:
     preds = [[("PER", "nico"), ("LOC", "berlin")]]

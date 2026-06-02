@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from german_llm_eval.loaders.base import Sample
 from german_llm_eval.tasks.base import (
+    _normalize_text,
     BinaryClassificationTask,
     MultiClassificationTask,
     NERPromptTask,
@@ -12,7 +13,27 @@ from german_llm_eval.tasks.base import (
 from german_llm_eval.tasks.registry import ALL_TASKS, TASK_DEFINITIONS
 
 
+# -- _normalize_text --
+
+
+def test_normalize_text_basic() -> None:
+    assert _normalize_text("Hello World") == "hello world"
+
+
+def test_normalize_text_punctuation() -> None:
+    assert _normalize_text("Hello, World!") == "hello world"
+
+
+def test_normalize_text_whitespace() -> None:
+    assert _normalize_text("  Hello   World  ") == "hello world"
+
+
+def test_normalize_text_unicode() -> None:
+    assert _normalize_text("Straße") == "strasse"
+
+
 # -- QATask --
+
 
 def test_qa_task_prompt() -> None:
     task = QATask(name="germanquad")
@@ -45,7 +66,29 @@ def test_qa_task_evaluate_case_insensitive() -> None:
     assert result.accuracy == 1.0
 
 
+def test_qa_task_evaluate_punctuation_stripped() -> None:
+    task = QATask(name="germanquad")
+    samples = [Sample(inputs={}, labels=["Hauptstadt"])]
+    result = task.evaluate(["Hauptstadt!"], samples)
+    assert result.accuracy == 1.0
+
+
+def test_qa_task_evaluate_whitespace_normalized() -> None:
+    task = QATask(name="germanquad")
+    samples = [Sample(inputs={}, labels=["Berlin Deutschland"])]
+    result = task.evaluate(["  Berlin   Deutschland  "], samples)
+    assert result.accuracy == 1.0
+
+
+def test_qa_task_evaluate_unicode_normalized() -> None:
+    task = QATask(name="germanquad")
+    samples = [Sample(inputs={}, labels=["Stra\u00dfe"])]
+    result = task.evaluate(["strasse"], samples)
+    assert result.accuracy == 1.0
+
+
 # -- BinaryClassificationTask --
+
 
 def test_binary_task_prompt() -> None:
     task = BinaryClassificationTask(
@@ -91,6 +134,7 @@ def test_binary_task_evaluate_partial() -> None:
 
 # -- MultiClassificationTask --
 
+
 def test_multi_task_prompt() -> None:
     task = MultiClassificationTask(
         name="polarity",
@@ -121,6 +165,7 @@ def test_multi_task_evaluate() -> None:
 
 
 # -- NERPromptTask --
+
 
 def test_ner_task_entity_types() -> None:
     task = NERPromptTask(name="ner_news")
@@ -161,6 +206,28 @@ def test_ner_task_parse_no_entities() -> None:
     assert entities == []
 
 
+def test_ner_task_parse_parentheses_format() -> None:
+    task = NERPromptTask(name="ner_news")
+    entities = task._parse_response("(PERSON) Nico\n(LOC) Berlin")
+    assert ("PERSON", "Nico") in entities
+    assert ("LOC", "Berlin") in entities
+
+
+def test_ner_task_parse_entity_parentheses_format() -> None:
+    task = NERPromptTask(name="ner_news")
+    entities = task._parse_response("Nico (PERSON)\nBerlin (LOC)")
+    assert ("PERSON", "Nico") in entities
+    assert ("LOC", "Berlin") in entities
+
+
+def test_ner_task_parse_mixed_format() -> None:
+    task = NERPromptTask(name="ner_news")
+    entities = task._parse_response("PERSON: Nico\n(LOC) Berlin\nMünchen (ORG)")
+    assert ("PERSON", "Nico") in entities
+    assert ("LOC", "Berlin") in entities
+    assert ("ORG", "München") in entities
+
+
 def test_ner_task_evaluate_f1() -> None:
     task = NERPromptTask(name="ner_news")
     samples = [
@@ -185,6 +252,7 @@ def test_ner_task_evaluate_partial() -> None:
 
 
 # -- TextPairClassificationTask --
+
 
 def test_text_pair_task_prompt() -> None:
     task = TextPairClassificationTask(
@@ -218,6 +286,7 @@ def test_text_pair_task_evaluate() -> None:
 
 # -- TextTripleClassificationTask --
 
+
 def test_text_triple_task_prompt() -> None:
     task = TextTripleClassificationTask(
         name="query_ad",
@@ -235,6 +304,7 @@ def test_text_triple_task_prompt() -> None:
 
 
 # -- Registry --
+
 
 def test_registry_has_all_tasks() -> None:
     assert len(ALL_TASKS) >= 19

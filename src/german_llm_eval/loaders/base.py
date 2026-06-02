@@ -54,11 +54,15 @@ class QALoader(TaskLoader):
             answer_texts = (
                 answers.get("text", []) if isinstance(answers, dict) else str(answers)
             )
+            ctx = record.get("context", "")
+            qst = record.get("question", "")
+            if not ctx and not qst:
+                continue
             rows.append(
                 Sample(
                     inputs={
-                        "context": record["context"],
-                        "question": record["question"],
+                        "context": ctx,
+                        "question": qst,
                     },
                     labels=(
                         answer_texts
