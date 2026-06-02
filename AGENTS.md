@@ -7,7 +7,7 @@ Custom API-based evaluator for German LLMs using SuperGLEBer benchmark datasets.
 ```sh
 uv sync                              # install deps
 german-llm-eval --list-tasks         # see all 19 tasks
-german-llm-eval --model gpt-4o --base-url https://api.openai.com \
+german-llm-eval --model gpt-4o --base-url https://api.openai.com/v1 \
   --api-key $OPENAI_API_KEY --tasks germanquad,polarity --max-samples 50
 ```
 
@@ -40,7 +40,8 @@ src/german_llm_eval/
 | `QALoader(is_arrow=True)` | HuggingFace Arrow IPC | germanquad, mlqa |
 | `CSVClassificationLoader` | CSV with configurable delimiter | Germeval 2021 tasks, flausch |
 | `TSVClassificationLoader` | TSV/TXT (auto-discovers extension) | polarity, massive_intents, offensive_lang |
-| `TextPairLoader` | TXT tab-separated pairs + label | nli, pawsx, quest_ans, news_class |
+| `TextPairLoader` | TXT tab-separated pairs + label | nli, quest_ans, news_class |
+| `TSVTextPairLoader` | TSV tab-separated pairs, optional header | pawsx |
 | `TextTripleLoader` | TXT tab-separated triples + label | query_ad |
 
 ## Key Gotchas
@@ -49,7 +50,10 @@ src/german_llm_eval/
 - **polarity**: 3 classes (positive/negative/neutral), registered as `MultiClassificationTask`
 - **offensive_lang**: labels are uppercase (`OTHER`, `ABUSE`, `INSULT`, `PROFANITY`)
 - **NER tasks**: prompt-based entity extraction, NOT token-level BIO tagging
+- **pawsx**: uses `TSVTextPairLoader(has_header=True)`, not `TextPairLoader`
 - All loaders auto-discover file extension (`.tsv`, `.csv`, `.txt`) and skip short rows
+- **Evaluator**: catches `BaseExceptionGroup` from `TaskGroup` to skip failed tasks gracefully
+- **Scorecard Metric column**: reads from `TaskResult.details["metric"]`; each task's `evaluate()` must write it
 
 ## Code Style
 - Python 3.12+, modern type hints (`list[str]`, `str | None`)
@@ -69,3 +73,9 @@ src/german_llm_eval/
 ## Changes Log
 - **2025-06-02**: Removed `SyncAPIClient` (dead code), added NER regex fallback parser,
   QA normalized exact match, `QALoader` `.get()` safety, removed unused `datasets`/`pyyaml` deps.
+- **2025-06-02**: Scorecard metric fix (Issue 1), ExceptionGroup graceful skip (Issue 2),
+  BinaryClassificationTask inverse label map, QuestAnsTask sample.labels fix, Polarity classes= fix,
+  entity F1 case normalization, MultiClassificationTask _label_map fix, pawsx TSVTextPairLoader,
+  quest_ans TextPairClassificationTask, CLI comma-separated tasks, API key ValueError,
+  CSVClassificationLoader csv.reader, dead code removal (CONLLParser), ner_legal entity types,
+  loguru integration, asyncio.TaskGroup concurrency, QALoader None guard, parse_args extraction.

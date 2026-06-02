@@ -2,17 +2,64 @@
 
 Custom API-based evaluation tool for German-language LLMs using SuperGLEBer benchmark datasets. Designed for evaluating models behind OpenAI-compatible `chat/completions` endpoints, with focus on RAG and GraphRAG use cases.
 
-## Usage
+## Quick Start
 
 ```sh
-german-llm-eval --model gpt-4o --base-url https://api.openai.com/v1 \
-  --api-key $OPENAI_API_KEY --tasks germanquad,polarity --max-samples 50
+uv sync                              # install deps
+uv run german-llm-eval --list-tasks  # see all 19 tasks
+```
 
-# Output to JSON
-german-llm-eval --model ... --output results.json
+### Sanity Check (Recommended)
 
-# List available tasks
-german-llm-eval --list-tasks
+Before running a full evaluation, verify your setup with a small subset:
+
+```sh
+uv run german-llm-eval \
+  --base-url http://localhost:11434/v1 \
+  --api-key ollama \
+  --model qwen3.5:9b \
+  --tasks polarity,germanquad,nli \
+  --max-samples 20 \
+  --concurrency 2
+```
+
+This tests one classification task (`polarity`), one QA task (`germanquad`), and one text-pair task (`nli`) with just 20 samples each.
+
+## Usage
+
+### Local Models (Ollama)
+
+```sh
+uv run german-llm-eval \
+  --base-url http://localhost:11434/v1 \
+  --api-key ollama \
+  --model qwen3.5:9b \
+  --concurrency 2 \
+  --output results/qwen3.5-9b.json
+```
+
+> **Tip:** For local models, use `--concurrency 2` to avoid overwhelming your GPU.
+
+### OpenAI API
+
+```sh
+uv run german-llm-eval \
+  --model gpt-4o \
+  --api-key "$OPENAI_API_KEY" \
+  --tasks germanquad,polarity \
+  --max-samples 50
+```
+
+### Output to JSON
+
+```sh
+uv run german-llm-eval --model ... --output results.json
+```
+
+### List Available Tasks
+
+```sh
+uv run german-llm-eval --list-tasks
 ```
 
 ### CLI Options
